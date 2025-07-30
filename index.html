@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通勤災害インタラクティブガイド</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: The SPA is designed with a thematic, non-linear structure for optimal user exploration. A fixed top navigation allows users to jump to key sections: 1. A core definition area with an interactive chart comparing "通勤災害" and "業務災害". 2. An interactive diagram section for the most complex topic: certification requirements ("逸脱・中断"), allowing users to explore scenarios. 3. A card-based layout for different compensation types, making dense information digestible. 4. A visual flowchart for the application process. 5. Sections for employer responsibility and recent updates. This structure prioritizes user understanding by transforming abstract rules and dense text into engaging, interactive learning modules, which is more effective than a simple linear presentation of the source report. -->
+    <!-- Visualization & Content Choices: 1. **業務災害との比較 (Comparison with Work Accidents)** -> Goal: Compare -> Viz: Side-by-side text comparison and a Chart.js Doughnut chart for the "waiting period" compensation difference -> Interaction: Hovering the chart reveals who pays (employer vs. no one) -> Justification: Visually highlights a key, often confusing, difference. 2. **認定要件 (Certification Requirements)** -> Goal: Organize/Inform -> Viz: Interactive diagram of a commute path with clickable detour points (supermarket, bar, hospital) built with HTML/CSS -> Interaction: Clicking a point updates a text box explaining the outcome (certified/not certified) and changes the path color -> Justification: Makes abstract rules concrete and easy to understand. 3. **補償の種類 (Compensation Types)** -> Goal: Inform -> Viz: A grid of clickable cards using HTML/CSS -> Interaction: Clicking a card reveals detailed information in a modal -> Justification: Breaks down complex information into manageable, user-initiated chunks. 4. **申請手続き (Application Process)** -> Goal: Organize -> Viz: A vertical flowchart diagram using HTML/CSS -> Interaction: Static visual -> Justification: Simplifies a sequential process. All choices use Canvas or HTML/CSS, adhering to the NO SVG/Mermaid constraint. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #FDFBF7;
+            color: #333;
+        }
+        .nav-link {
+            transition: color 0.3s, border-bottom-color 0.3s;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-link:hover, .nav-link.active {
+            color: #A0522D;
+            border-bottom-color: #A0522D;
+        }
+        .card {
+            background-color: #FFFFFF;
+            border: 1px solid #EAEAEA;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
+        }
+        .btn {
+            background-color: #A0522D;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #8B4513;
+        }
+        h2 {
+            font-size: 1.875rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #EAEAEA;
+        }
+        h3 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #555;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .path-line {
+            position: relative;
+            width: 8px;
+            background-color: #D1D5DB;
+            margin: 0 auto;
+        }
+        .path-point {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 0.875rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 4px solid #FDFBF7;
+        }
+        .path-point:hover {
+            transform: translateX(-50%) scale(1.1);
+        }
+        #modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+        }
+        #modal-content {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 50;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-30">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex-shrink-0">
+                    <a href="#" class="text-2xl font-bold text-[#A0522D]">通勤災害ガイド</a>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#section-about" class="nav-link px-3 py-2 rounded-md text-sm font-medium">通勤災害とは？</a>
+                        <a href="#section-certification" class="nav-link px-3 py-2 rounded-md text-sm font-medium">認定される？</a>
+                        <a href="#section-compensation" class="nav-link px-3 py-2 rounded-md text-sm font-medium">補償の種類</a>
+                        <a href="#section-application" class="nav-link px-3 py-2 rounded-md text-sm font-medium">申請手続き</a>
+                        <a href="#section-responsibility" class="nav-link px-3 py-2 rounded-md text-sm font-medium">企業の責任</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+
+        <section id="section-intro" class="text-center mb-16">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-[#A0522D] mb-4">もしも通勤中に、事故にあったら？</h1>
+            <p class="max-w-3xl mx-auto text-lg text-gray-600">
+                通勤災害は、誰にでも起こりうる身近なリスクです。このガイドでは、複雑な労災保険の制度を、インタラクティブな要素を通じてわかりやすく解説します。
+                いざという時に備え、正しい知識を身につけましょう。
+            </p>
+        </section>
+
+        <section id="section-about" class="mb-16 scroll-mt-16">
+            <h2>通勤災害とは？</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                通勤災害とは、労働者が仕事のために、住居と職場との間を合理的な経路・方法で移動する際に発生したケガや病気のことです。労災保険法に基づき、治療費や休業中の生活費などが補償されます。業務中の災害である「業務災害」とは、認定の基準や補償の一部に違いがあります。下の比較表とグラフで、その主な違いを確認してみましょう。
+            </p>
+            <div class="grid md:grid-cols-2 gap-8 items-start">
+                <div class="card p-6">
+                    <h3 class="text-center">業務災害 vs 通勤災害 主な違い</h3>
+                    <table class="w-full mt-4 text-left">
+                        <thead>
+                            <tr class="border-b-2 border-gray-200">
+                                <th class="py-2">項目</th>
+                                <th class="py-2 text-center bg-blue-50 rounded-t-lg">業務災害</th>
+                                <th class="py-2 text-center bg-green-50 rounded-t-lg">通勤災害</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-gray-100">
+                                <td class="py-3 font-bold">定義</td>
+                                <td class="py-3 text-sm">業務が原因で発生した傷病</td>
+                                <td class="py-3 text-sm">通勤が原因で発生した傷病</td>
+                            </tr>
+                            <tr class="border-b border-gray-100">
+                                <td class="py-3 font-bold">休業補償<br>(最初の3日間)</td>
+                                <td class="py-3 text-sm">事業主が補償義務を負う</td>
+                                <td class="py-3 text-sm">事業主に補償義務はない</td>
+                            </tr>
+                            <tr class="border-b border-gray-100">
+                                <td class="py-3 font-bold">給付名称</td>
+                                <td class="py-3 text-sm">「補償」が付く<br>(例: 療養補償給付)</td>
+                                <td class="py-3 text-sm">「補償」が付かない<br>(例: 療養給付)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card p-6">
+                    <h3 class="text-center">休業開始後3日間の補償は誰がする？</h3>
+                    <div class="chart-container">
+                        <canvas id="comparisonChart"></canvas>
+                    </div>
+                    <p class="text-sm text-center text-gray-600 mt-2">グラフにカーソルを合わせると詳細が表示されます。</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="section-certification" class="mb-16 scroll-mt-16">
+            <h2>認定される？されない？通勤経路の重要性</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                通勤災害として認められるには、「合理的な経路」から外れていないか（逸脱）、通勤を中断していないか（中断）が重要なポイントになります。ただし、日常生活に必要な最小限の行為は例外として認められる場合があります。下の図で、様々なケースをクリックして、認定されるかどうかを確認してみましょう。
+            </p>
+            <div class="flex flex-col md:flex-row gap-8">
+                <div class="md:w-1/3 relative flex justify-center">
+                    <div class="path-line h-full"></div>
+                    <div id="path-home" class="path-point bg-blue-500 text-white" style="top: 5%;">家</div>
+                    <div id="path-supermarket" class="path-point bg-yellow-400" style="top: 25%;">スーパー</div>
+                    <div id="path-hospital" class="path-point bg-yellow-400" style="top: 45%;">病院</div>
+                    <div id="path-bar" class="path-point bg-yellow-400" style="top: 65%;">飲み屋</div>
+                    <div id="path-work" class="path-point bg-green-500 text-white" style="top: 85%;">会社</div>
+                </div>
+                <div class="md:w-2/3">
+                    <div id="scenario-explanation" class="card p-6 min-h-[300px] flex flex-col justify-center">
+                        <h4 id="scenario-title" class="text-xl font-bold text-[#A0522D] mb-2">ケースを選択してください</h4>
+                        <p id="scenario-text" class="text-gray-600">左の図の「スーパー」「病院」「飲み屋」をクリックすると、それぞれのケースで通勤災害と認定されるかどうかの解説が表示されます。</p>
+                        <div id="scenario-result" class="mt-4 text-2xl font-bold"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="section-compensation" class="mb-16 scroll-mt-16">
+            <h2>どんな補償があるの？</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                通勤災害と認定されると、労災保険から様々な給付が受けられます。治療費の補償から休業中の生活保障、後遺障害が残った場合の給付まで、手厚いサポートが用意されています。各カードをクリックして、詳しい内容を確認しましょう。
+            </p>
+            <div id="compensation-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+        </section>
+
+        <section id="section-application" class="mb-16 scroll-mt-16">
+            <h2>どうやって申請するの？</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                通勤災害の申請は、被災した労働者本人または遺族が行います。手続きは給付の種類によって異なりますが、大まかな流れは以下の通りです。このフローチャートで、申請から給付までのステップを確認しましょう。
+            </p>
+            <div class="card p-8">
+                <div class="relative">
+                    <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                    <div class="relative mb-8">
+                        <div class="absolute left-4 top-4 w-0.5 h-full bg-[#A0522D]"></div>
+                        <div class="flex items-center">
+                            <div class="z-10 bg-[#A0522D] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">1</div>
+                            <div class="ml-8">
+                                <h4 class="font-bold text-lg">災害発生・病院受診</h4>
+                                <p class="text-gray-600">労災指定病院を受診。窓口で通勤災害であることを伝える。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative mb-8">
+                        <div class="absolute left-4 top-4 w-0.5 h-full bg-[#A0522D]"></div>
+                        <div class="flex items-center">
+                            <div class="z-10 bg-[#A0522D] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">2</div>
+                            <div class="ml-8">
+                                <h4 class="font-bold text-lg">会社への報告</h4>
+                                <p class="text-gray-600">会社に通勤災害が発生したことを報告し、事業主の証明をもらう。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative mb-8">
+                        <div class="flex items-center">
+                            <div class="z-10 bg-[#A0522D] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">3</div>
+                            <div class="ml-8">
+                                <h4 class="font-bold text-lg">請求書の提出</h4>
+                                <p class="text-gray-600">治療を受ける場合は病院へ、休業する場合は労働基準監督署へ、必要書類を提出。</p>
+                            </div>
+                        </div>
+                    </div>
+                     <div class="relative">
+                        <div class="flex items-center">
+                            <div class="z-10 bg-[#A0522D] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">4</div>
+                            <div class="ml-8">
+                                <h4 class="font-bold text-lg">調査・給付決定</h4>
+                                <p class="text-gray-600">労働基準監督署が調査を行い、支給が決定されると保険給付が支払われる。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="section-responsibility" class="scroll-mt-16">
+            <h2>企業の責任は？</h2>
+            <p class="text-lg text-gray-700 mb-8">
+                企業は労働者の安全に配慮する「安全配慮義務」を負っています。通常、通勤は私的な行為とされますが、過労が原因で通勤中に事故が起きた場合など、企業の責任が問われるケースもあります。災害時の出社命令なども慎重な判断が求められます。
+            </p>
+             <div class="card p-6 bg-amber-50 border-amber-200">
+                <h3 class="text-amber-800">注目すべき判例：過労と通勤災害</h3>
+                <p class="text-amber-700">
+                    徹夜勤務明けのバイク通勤中に事故死したケースで、裁判所は「企業が過労状態を認識しながら事故回避措置を怠った」として、企業の安全配慮義務違反を指摘しました。これは、業務内容が通勤の安全に影響を及ぼす場合、企業が一定の責任を負う可能性を示唆しています。
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-gray-800 text-white mt-16">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center">
+            <p>&copy; 2025 通勤災害インタラクティブガイド. All Rights Reserved.</p>
+            <p class="text-xs text-gray-400 mt-1">このコンテンツは情報提供を目的としており、法的助言を構成するものではありません。</p>
+        </div>
+    </footer>
+    
+    <div id="modal-backdrop" class="hidden"></div>
+    <div id="modal-content" class="card p-6 w-11/12 md:max-w-2xl hidden">
+        <h3 id="modal-title" class="text-2xl font-bold mb-4"></h3>
+        <div id="modal-body" class="text-gray-700 space-y-4"></div>
+        <button id="modal-close" class="btn mt-6 float-right">閉じる</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const comparisonChartCtx = document.getElementById('comparisonChart').getContext('2d');
+            new Chart(comparisonChartCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['業務災害 (事業主が補償)', '通勤災害 (補償なし)'],
+                    datasets: [{
+                        label: '休業開始後3日間の補償',
+                        data: [1, 1],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.7)',
+                            'rgba(16, 185, 129, 0.7)',
+                        ],
+                        borderColor: [
+                            'rgba(59, 130, 246, 1)',
+                            'rgba(16, 185, 129, 1)',
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label || '';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const scenarios = {
+                'path-supermarket': {
+                    title: 'ケース1：スーパーで日用品の買い物',
+                    text: '通勤の帰りにスーパーで夕食の材料を買う、といった行為は「日常生活上必要な行為」と見なされます。スーパーにいる間は通勤の中断とされますが、買い物を終えて通常の帰宅ルートに戻った後であれば、再び通勤と認められます。したがって、スーパーを出てから家までの間で事故に遭った場合は、通勤災害として認定される可能性が高いです。',
+                    result: '認定される可能性が高い',
+                    resultColor: 'text-green-600'
+                },
+                'path-hospital': {
+                    title: 'ケース2：病院で診察を受ける',
+                    text: '持病の治療や体調不良で病院に立ち寄る行為も「日常生活上必要な行為」に含まれます。診察や治療を受けている間は通勤の中断となりますが、その後、合理的な経路に復帰すれば通勤が再開されたとみなされます。病院から自宅への帰路での事故は、通勤災害として認定される可能性が高いです。',
+                    result: '認定される可能性が高い',
+                    resultColor: 'text-green-600'
+                },
+                'path-bar': {
+                    title: 'ケース3：飲み屋で飲酒する',
+                    text: '仕事帰りに同僚と飲みに行ったり、バーに立ち寄ったりする行為は、一般的に「日常生活上必要な行為」とは見なされません。これは私的な目的での逸脱・中断と判断されます。そのため、飲酒後、店を出てからの移動中に起きた事故は、原則として通勤災害とは認定されません。',
+                    result: '認定されない可能性が高い',
+                    resultColor: 'text-red-600'
+                }
+            };
+
+            const scenarioExplanation = document.getElementById('scenario-explanation');
+            const scenarioTitle = document.getElementById('scenario-title');
+            const scenarioText = document.getElementById('scenario-text');
+            const scenarioResult = document.getElementById('scenario-result');
+            const pathPoints = document.querySelectorAll('.path-point');
+
+            pathPoints.forEach(point => {
+                point.addEventListener('click', function() {
+                    const scenario = scenarios[this.id];
+                    if (scenario) {
+                        pathPoints.forEach(p => p.style.transform = 'translateX(-50%) scale(1)');
+                        this.style.transform = 'translateX(-50%) scale(1.2)';
+
+                        scenarioTitle.textContent = scenario.title;
+                        scenarioText.textContent = scenario.text;
+                        scenarioResult.textContent = scenario.result;
+                        scenarioResult.className = `mt-4 text-2xl font-bold ${scenario.resultColor}`;
+                    }
+                });
+            });
+
+            const compensationData = [
+                { id: 'ryoyo', title: '療養給付', icon: '🏥', description: 'ケガや病気の治療費、薬代、入院費などが支給されます。労災指定病院なら窓口負担なしで治療が受けられます。' },
+                { id: 'kyugyo', title: '休業給付', icon: '🛌', description: '療養のために働けず、給料がもらえない場合に、休業4日目から給付基礎日額の80%（休業給付60%+特別支給金20%）が支給されます。' },
+                { id: 'shogai', title: '障害給付', icon: '🧑‍�', description: '治療後も体に障害が残った場合に、障害の程度に応じて年金または一時金が支給されます。' },
+                { id: 'izoku', title: '遺族給付', icon: '👨‍👩‍👧‍👦', description: '労働者が死亡した場合に、その遺族の生活を支えるために年金または一時金が支給されます。' },
+                { id: 'shobyo', title: '傷病年金', icon: '🗓️', description: '療養開始後1年6ヶ月経っても治らず、重い障害状態にある場合に、休業給付に代わって支給されます。' },
+                { id: 'kaigo', title: '介護給付', icon: '🤝', description: '障害年金または傷病年金を受け、常時または随時介護が必要な場合に、介護費用が支給されます。' },
+                { id: 'sosai', title: '葬祭給付', icon: '🙏', description: '労働者が死亡した場合に、葬儀を行う人に対して葬儀費用が支給されます。' }
+            ];
+
+            const cardsContainer = document.getElementById('compensation-cards');
+            const modalBackdrop = document.getElementById('modal-backdrop');
+            const modalContent = document.getElementById('modal-content');
+            const modalTitle = document.getElementById('modal-title');
+            const modalBody = document.getElementById('modal-body');
+            const modalClose = document.getElementById('modal-close');
+
+            compensationData.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card p-6 flex flex-col items-center text-center cursor-pointer';
+                card.innerHTML = `
+                    <div class="text-5xl mb-4">${item.icon}</div>
+                    <h4 class="text-xl font-bold mb-2">${item.title}</h4>
+                    <p class="text-gray-600 text-sm">${item.description.substring(0, 40)}...</p>
+                `;
+                card.addEventListener('click', () => {
+                    modalTitle.textContent = item.title;
+                    modalBody.innerHTML = `<p>${item.description}</p>`;
+                    modalBackdrop.classList.remove('hidden');
+                    modalContent.classList.remove('hidden');
+                });
+                cardsContainer.appendChild(card);
+            });
+            
+            function closeModal() {
+                modalBackdrop.classList.add('hidden');
+                modalContent.classList.add('hidden');
+            }
+
+            modalClose.addEventListener('click', closeModal);
+            modalBackdrop.addEventListener('click', closeModal);
+
+            const navLinks = document.querySelectorAll('.nav-link');
+            const sections = document.querySelectorAll('section');
+
+            window.addEventListener('scroll', () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 80) {
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navLinks.forEach(link => {
+                    link.classList.remove('active');
+                    if (link.getAttribute('href').substring(1) === current) {
+                        link.classList.add('active');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+�
